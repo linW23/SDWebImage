@@ -13,7 +13,10 @@
 #import "UIImage+MultiFormat.h"
 #import "SDWebImageCoderHelper.h"
 #import "SDAnimatedImageRep.h"
-
+/**最大尺寸手机支持的最大宽度，单位：ps像素（不是物理像素）*/
+static const long long maxIphoneScreenMaxSizeWidth = 1080; //现在是iphone x
+/**最大尺寸手机支持的最大高度，单位：ps像素（不是物理像素）*/
+static const long long maxIphoneScreenMaxSizeHeight = 1920; //现在是iphone x
 @implementation SDWebImageGIFCoder
 
 + (instancetype)sharedCoder {
@@ -28,6 +31,52 @@
 #pragma mark - Decode
 - (BOOL)canDecodeFromData:(nullable NSData *)data {
     return ([NSData sd_imageFormatForImageData:data] == SDImageFormatGIF);
+}
+
+- (UIImage*)compressImageWithData:(NSData *)data
+{
+    
+    UIImage *image = [UIImage imageWithData:data];
+    if((image.size.height <= maxIphoneScreenMaxSizeHeight) && (image.size.width <= maxIphoneScreenMaxSizeWidth))
+    {
+        return image;
+    }
+    if((maxIphoneScreenMaxSizeWidth == 0) || (maxIphoneScreenMaxSizeHeight == 0))
+    {
+        //防止除数为0而crash,理论上不该出现maxIphoneScreenMaxSizeHeight为0
+        return nil;
+    }
+    //iphonex 5.8英寸屏 1242x2208
+    float width = maxIphoneScreenMaxSizeWidth;
+    float height = image.size.height/(image.size.width/width);
+    
+    if((image.size.width >= maxIphoneScreenMaxSizeWidth) && (image.size.height >= maxIphoneScreenMaxSizeHeight))
+    {
+        width = maxIphoneScreenMaxSizeWidth;
+        height = image.size.height/(image.size.width/width);
+        if(height > maxIphoneScreenMaxSizeHeight)
+        {
+            height = maxIphoneScreenMaxSizeHeight;
+            width = image.size.width/(image.size.height/height);
+        }
+    }
+    else if(image.size.width >= maxIphoneScreenMaxSizeWidth)
+    {
+        height = maxIphoneScreenMaxSizeHeight;
+        width = image.size.width/(image.size.height/height);
+    }
+    
+    // 创建一个bitmap的context
+    // 并把它设置成为当前正在使用的context
+    UIGraphicsBeginImageContext(CGSizeMake(width, height));
+    [image drawInRect:CGRectMake(0, 0, width , height)];
+    
+    // 从当前context中创建一个改变大小后的图片
+    UIImage *newImage = UIGraphicsGetImageFromCurrentImageContext();
+    // 使当前的context出堆栈
+    UIGraphicsEndImageContext();
+    
+    return newImage;
 }
 
 - (UIImage *)decodedImageWithData:(NSData *)data {
@@ -51,7 +100,7 @@
     UIImage *animatedImage;
     
     if (count <= 1) {
-        animatedImage = [[UIImage alloc] initWithData:data];
+        animatedImage = [self compressImageWithData:data];
     } else {
         NSMutableArray<SDWebImageFrame *> *frames = [NSMutableArray array];
         
